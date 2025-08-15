@@ -270,8 +270,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editarRegistro'])) {
     $p_nombre = $_POST['p_nombre'];
     $s_nombre = $_POST['s_nombre'];
 
-    echo "Documento que se busca: " . $documento . "<br>";
-    echo "ID del registro a ignorar: " . $id . "<br>";
+    //Debugin necesario por si algun dia no se pueda actualizar dicho registro, tener encuenta que esta parte necesito un id AI, Auto-Incremental
+    //Practicamente es una llave primaria que no tenia porque si no la encuentra entonces como va a saber que es ese usuario...
+    // echo "Documento que se busca: " . $documento . "<br>";
+    // echo "ID del registro a ignorar: " . $id . "<br>";
     
     // Verificar que el documento no exista en otro registro
     $stmt = $conexion->prepare("SELECT id FROM sisben WHERE Documento = ? AND id != ?");
