@@ -91,7 +91,7 @@ if (isset($_FILES['excelFile']) && $_FILES['excelFile']['error'] == UPLOAD_ERR_O
                 }
 
                 // Verificar si existe en la BD
-                $stmt = $conn->prepare("SELECT id, TipoDoc, P_Apellido, S_Apellido, P_Nombre, S_Nombre FROM sisben WHERE Documento = ?");
+                $stmt = $conexion->prepare("SELECT id, TipoDoc, P_Apellido, S_Apellido, P_Nombre, S_Nombre FROM sisben WHERE Documento = ?");
                 $stmt->bind_param("s", $documento);
                 $stmt->execute();
                 $result = $stmt->get_result();
@@ -171,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirmarExcel'])) {
         // Procesar registros nuevos
         if (isset($excel_data['nuevos_registros'])) {
             foreach ($excel_data['nuevos_registros'] as $registro) {
-                $stmt = $conn->prepare("INSERT INTO sisben (TipoDoc, Documento, P_Apellido, S_Apellido, P_Nombre, S_Nombre) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt = $conexion->prepare("INSERT INTO sisben (TipoDoc, Documento, P_Apellido, S_Apellido, P_Nombre, S_Nombre) VALUES (?, ?, ?, ?, ?, ?)");
                 if ($stmt) {
                     $stmt->bind_param("ssssss", $registro['tipoDoc'], $registro['documento'], $registro['p_apellido'], $registro['s_apellido'], $registro['p_nombre'], $registro['s_nombre']);
                     if ($stmt->execute()) {
@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirmarExcel'])) {
                 if (isset($excel_data['duplicados'][$documento])) {
                     $registro_a_actualizar = $excel_data['duplicados'][$documento]['registro'];
 
-                    $stmt = $conn->prepare("UPDATE sisben SET TipoDoc=?, P_Apellido=?, S_Apellido=?, P_Nombre=?, S_Nombre=? WHERE Documento=?");
+                    $stmt = $conexion->prepare("UPDATE sisben SET TipoDoc=?, P_Apellido=?, S_Apellido=?, P_Nombre=?, S_Nombre=? WHERE Documento=?");
                     if ($stmt) {
                         $stmt->bind_param("ssssss", 
                             $registro_a_actualizar['tipoDoc'],
@@ -243,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['updateStatus'])) {
     $ids = $_POST['ids'] ?? [];
     if (!empty($ids)) {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $conn->prepare("UPDATE sisben SET actualizado = TRUE WHERE id IN ($placeholders)");
+        $stmt = $conexion->prepare("UPDATE sisben SET actualizado = TRUE WHERE id IN ($placeholders)");
         $types = str_repeat('i', count($ids));
         $stmt->bind_param($types, ...$ids);
 
@@ -251,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['updateStatus'])) {
             $message = 'Estado de ' . $stmt->affected_rows . ' registros actualizado correctamente.';
             $message_type = 'success';
         } else {
-            $message = 'Error al actualizar el estado: ' . $conn->error;
+            $message = 'Error al actualizar el estado: ' . $conexion->error;
             $message_type = 'error';
         }
         $stmt->close();
@@ -274,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editarRegistro'])) {
     echo "ID del registro a ignorar: " . $id . "<br>";
     
     // Verificar que el documento no exista en otro registro
-    $stmt = $conn->prepare("SELECT id FROM sisben WHERE Documento = ? AND id != ?");
+    $stmt = $conexion->prepare("SELECT id FROM sisben WHERE Documento = ? AND id != ?");
     $stmt->bind_param("si", $documento, $id);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -283,7 +283,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editarRegistro'])) {
         $message = "Error: El número de documento ya existe en otro registro.";
         $message_type = 'error';
     } else {
-        $stmt = $conn->prepare("UPDATE sisben SET TipoDoc=?, Documento=?, P_Apellido=?, S_Apellido=?, P_Nombre=?, S_Nombre=? WHERE id=?");
+        $stmt = $conexion->prepare("UPDATE sisben SET TipoDoc=?, Documento=?, P_Apellido=?, S_Apellido=?, P_Nombre=?, S_Nombre=? WHERE id=?");
         $stmt->bind_param("ssssssi", $tipoDoc, $documento, $p_apellido, $s_apellido, $p_nombre, $s_nombre, $id);
         
         // Ejecutamos la consulta y luego verificamos si se afectó alguna fila
@@ -296,7 +296,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editarRegistro'])) {
                 $message_type = 'info';
             }
         } else {
-            $message = "Error al actualizar el registro: " . $conn->error;
+            $message = "Error al actualizar el registro: " . $conexion->error;
             $message_type = 'error';
         }
         $stmt->close();
@@ -309,14 +309,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editarRegistro'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['eliminarRegistro'])) {
     $id = (int)$_POST['id'];
     
-    $stmt = $conn->prepare("DELETE FROM sisben WHERE id = ?");
+    $stmt = $conexion->prepare("DELETE FROM sisben WHERE id = ?");
     $stmt->bind_param("i", $id);
     
     if ($stmt->execute()) {
         $message = "Registro eliminado correctamente.";
         $message_type = 'success';
     } else {
-        $message = "Error al eliminar el registro: " . $conn->error;
+        $message = "Error al eliminar el registro: " . $conexion->error;
         $message_type = 'error';
     }
     $stmt->close();
@@ -334,7 +334,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crearRegistro'])) {
     $s_nombre = $_POST['s_nombre'];
     
     // Verificar que el documento no exista
-    $stmt = $conn->prepare("SELECT id FROM sisben WHERE Documento = ?");
+    $stmt = $conexion->prepare("SELECT id FROM sisben WHERE Documento = ?");
     $stmt->bind_param("s", $documento);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -343,14 +343,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crearRegistro'])) {
         $message = "Error: El número de documento ya existe.";
         $message_type = 'error';
     } else {
-        $stmt = $conn->prepare("INSERT INTO sisben (TipoDoc, Documento, P_Apellido, S_Apellido, P_Nombre, S_Nombre) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt = $conexion->prepare("INSERT INTO sisben (TipoDoc, Documento, P_Apellido, S_Apellido, P_Nombre, S_Nombre) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->bind_param("ssssss", $tipoDoc, $documento, $p_apellido, $s_apellido, $p_nombre, $s_nombre);
         
         if ($stmt->execute()) {
             $message = "Registro creado correctamente.";
             $message_type = 'success';
         } else {
-            $message = "Error al crear el registro: " . $conn->error;
+            $message = "Error al crear el registro: " . $conexion->error;
             $message_type = 'error';
         }
         $stmt->close();
@@ -407,7 +407,7 @@ $sql_where = count($sql_conditions) > 0 ? " WHERE " . implode(' AND ', $sql_cond
 
 // Contar registros
 $sql_count = "SELECT COUNT(*) as total " . $sql_base . $sql_where;
-if ($stmt = $conn->prepare($sql_count)) {
+if ($stmt = $conexion->prepare($sql_count)) {
     if (!empty($sql_params)) {
         $stmt->bind_param($sql_types, ...$sql_params);
     }
@@ -423,7 +423,7 @@ $offset = ($pagina_actual - 1) * $registros_por_pagina;
 // Obtener registros para la página actual
 $sql_select = "SELECT id, TipoDoc, Documento, P_Apellido, S_Apellido, P_Nombre, S_Nombre, actualizado " . $sql_base . $sql_where . " ORDER BY id DESC LIMIT ? OFFSET ?";
 
-if ($stmt = $conn->prepare($sql_select)) {
+if ($stmt = $conexion->prepare($sql_select)) {
     // Agregar los parámetros de paginación al final de la lista
     $sql_params_final = array_merge($sql_params, [(int)$registros_por_pagina, (int)$offset]);
     $sql_types_final = $sql_types . 'ii';
@@ -1172,5 +1172,5 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
 </html>
 
 <?php
-$conn->close();
+$conexion->close();
 ?>
