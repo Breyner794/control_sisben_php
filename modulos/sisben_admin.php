@@ -1,10 +1,13 @@
 <?php
-session_start();
-
+require_once '../Middleware/auth.php';
 require_once '../db_connect.php';
+require_once '../Funciones/audit_functions.php';
+
+AuthMiddleware::verificarLogin();
+AuthMiddleware::verificarRol(['admin_sistema', 'operador_sisben']); 
 
 // Incluir la librería PHPSpreadsheet
-require 'vendor/autoload.php';
+require '../includes/vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -143,6 +146,11 @@ if (isset($_FILES['excelFile']) && $_FILES['excelFile']['error'] == UPLOAD_ERR_O
                 
                 $message = "Se encontraron " . count($nuevos_registros) . " registros nuevos y " . count($duplicados) . " duplicados con cambios. Revise la vista previa antes de confirmar.";
                 $message_type = 'warning';
+
+                $num_nuevos = count($nuevos_registros);
+                $num_duplicados = count($duplicados_map);
+                logAuditoria("Análisis de archivo Excel: $num_nuevos nuevos y $num_duplicados duplicados.", "sisben", "N/A");
+
             } else {
                 $message = "No se encontraron registros válidos para procesar.";
                 $message_type = 'error';
@@ -210,6 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirmarExcel'])) {
         
         $message = "Procesamiento completado. Se insertaron {$insertCount} registros nuevos y se actualizaron {$updateCount} registros existentes.";
         $message_type = 'success';
+
+        logAuditoria("Importación confirmada: $insertCount registros insertados y $updateCount actualizados.", "sisben", "N/A");
         
         // Limpia las variables de sesión
         unset($_SESSION['excel_data']);
@@ -250,6 +260,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['updateStatus'])) {
         if ($stmt->execute()) {
             $message = 'Estado de ' . $stmt->affected_rows . ' registros actualizado correctamente.';
             $message_type = 'success';
+            $registros_afectados = $stmt->affected_rows;
+            logAuditoria("Actualización de estado de encuestados", "sisben", "Se actualizaron $registros_afectados registros.");
         } else {
             $message = 'Error al actualizar el estado: ' . $conexion->error;
             $message_type = 'error';
@@ -293,6 +305,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editarRegistro'])) {
             if ($stmt->affected_rows > 0) {
                 $message = "Registro actualizado correctamente.";
                 $message_type = 'success';
+                logAuditoria("Actualización de registro", "sisben", $id);
             } else {
                 $message = "No se realizaron cambios en el registro. Es posible que el ID no exista o los datos sean los mismos.";
                 $message_type = 'info';
@@ -317,6 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['eliminarRegistro'])) 
     if ($stmt->execute()) {
         $message = "Registro eliminado correctamente.";
         $message_type = 'success';
+        logAuditoria("Registro Eliminado", "sisben", $id);
     } else {
         $message = "Error al eliminar el registro: " . $conexion->error;
         $message_type = 'error';
@@ -349,6 +363,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crearRegistro'])) {
         $stmt->bind_param("ssssss", $tipoDoc, $documento, $p_apellido, $s_apellido, $p_nombre, $s_nombre);
         
         if ($stmt->execute()) {
+            $nuevo_id = $stmt->insert_id;
+            logAuditoria("Creación de registro", "sisben", $nuevo_id);
             $message = "Registro creado correctamente.";
             $message_type = 'success';
         } else {
@@ -503,6 +519,7 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Módulo de Control Sisbén</title>
+    <link rel="stylesheet" href="../css/estilos_modulos.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -544,6 +561,11 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
+
+    <header class="navbar">
+        <h2>Gestión de Datos SISBEN</h2>
+        <a href="../dashboard.php" class="back-btn">← Volver al Dashboard</a>
+    </header>
 
     <div class="container mx-auto p-4 md:p-8">
         <div class="bg-white p-6 md:p-8 rounded-2xl shadow-xl border border-gray-200">
@@ -739,14 +761,14 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
                 </div>
 
             <!-- Botón para Crear Nuevo Registro -->
-            <!-- <div class="mb-6 text-center">
+            <div class="mb-6 text-center">
                 <button onclick="openCreateModal()" class="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-300">
                     <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                     </svg>
                     Crear Nuevo Registro
                 </button>
-            </div> -->
+            </div>
             <?php endif; ?>
 
             <!-- Sección de Búsqueda y Tabla de Datos -->
@@ -845,13 +867,13 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
                                 <?php if ($result && $result->num_rows > 0): ?>
                                     <?php while($row = $result->fetch_assoc()): ?>
                                     <tr class="<?php echo $row['actualizado'] ? 'bg-green-50' : ''; ?>">
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><?php echo htmlspecialchars($row['TipoDoc']); ?></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['Documento']); ?></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['P_Apellido']); ?></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['S_Apellido']); ?></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['P_Nombre']); ?></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['S_Nombre']); ?></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                        <td data-label="TipoDoc" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><?php echo htmlspecialchars($row['TipoDoc']); ?></td>
+                                        <td data-label="Documento" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['Documento']); ?></td>
+                                        <td data-label="P_Apellido" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['P_Apellido']); ?></td>
+                                        <td data-label="S_Apellido" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['S_Apellido']); ?></td>
+                                        <td data-label="P_Nombre" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['P_Nombre']); ?></td>
+                                        <td data-label="S_Nombre" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($row['S_Nombre']); ?></td>
+                                        <td data-label="Encuestado" class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                                             
                                             <input type="checkbox" name="ids[]" value="<?php echo $row['id']; ?>" <?php echo $row['actualizado'] ? 'checked disabled' : ''; ?> class="h-4 w-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500">
                                         </td>
@@ -860,6 +882,11 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
                                                 <button type="button" onclick="openEditModal(<?php echo htmlspecialchars(json_encode($row)); ?>)" class="text-indigo-600 hover:text-indigo-900">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                    </svg>
+                                                </button>
+                                                <button type="button" onclick="confirmarEliminar(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['P_Nombre'] . ' ' . $row['P_Apellido']); ?>')" class="text-red-600 hover:text-red-900">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                                     </svg>
                                                 </button>
                                             </div>
@@ -1004,14 +1031,14 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
             window.location.href = window.location.pathname + '?' + urlParams.toString();
         }
 
-        // function openCreateModal() {
-        //     document.getElementById('modalTitle').textContent = 'Crear Nuevo Registro';
-        //     document.getElementById('editForm').reset();
-        //     document.getElementById('editId').value = '';
-        //     document.getElementById('submitBtn').name = 'crearRegistro';
-        //     document.getElementById('submitBtn').textContent = 'Crear';
-        //     document.getElementById('editModal').classList.remove('hidden');
-        // }
+        function openCreateModal() {
+            document.getElementById('modalTitle').textContent = 'Crear Nuevo Registro';
+            document.getElementById('editForm').reset();
+            document.getElementById('editId').value = '';
+            document.getElementById('submitBtn').name = 'crearRegistro';
+            document.getElementById('submitBtn').textContent = 'Crear';
+            document.getElementById('editModal').classList.remove('hidden');
+        }
 
         function openEditModal(registro) {
             document.getElementById('modalTitle').textContent = 'Editar Registro';
@@ -1039,6 +1066,30 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
 
         function closeDeleteModal() {
             document.getElementById('deleteModal').classList.add('hidden');
+        }
+
+        function confirmarEliminar(id, nombre) {
+            if (confirm('¿Estás seguro de que deseas eliminar el registro de ' + nombre + '? Esta acción no se puede deshacer.')) {
+                // Crear un formulario temporal para enviar la solicitud de eliminación
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '';
+                
+                const inputId = document.createElement('input');
+                inputId.type = 'hidden';
+                inputId.name = 'id';
+                inputId.value = id;
+                
+                const inputAction = document.createElement('input');
+                inputAction.type = 'hidden';
+                inputAction.name = 'eliminarRegistro';
+                inputAction.value = '1';
+                
+                form.appendChild(inputId);
+                form.appendChild(inputAction);
+                document.body.appendChild(form);
+                form.submit();
+            }
         }
 
         // Cerrar modales al hacer clic fuera
@@ -1118,7 +1169,7 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
         formData.append('documento', documento);
         formData.append('accion', accion);
 
-        fetch('<?php echo htmlspecialchars('guardar_eleccion.php'); ?>', {
+        fetch('<?php echo htmlspecialchars('../Funciones/guardar_eleccion.php'); ?>', {
             method: 'POST',
             body: formData
         })
@@ -1136,7 +1187,7 @@ $mostrar_vista_previa = isset($_SESSION['excel_data']) && (!empty($_SESSION['exc
         const formData = new FormData();
         formData.append('decisiones_masivas', JSON.stringify(decisiones));
 
-        fetch('<?php echo htmlspecialchars('guardar_eleccion.php'); ?>', {
+        fetch('<?php echo htmlspecialchars('../Funciones/guardar_eleccion.php'); ?>', {
             method: 'POST',
             body: formData
         })
